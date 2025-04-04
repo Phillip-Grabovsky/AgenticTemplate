@@ -14,7 +14,7 @@ class LLMClient:
     keychain = {}
     convos = {}
 
-    def __init__(self, prompts="prompts.json"):
+    def __init__(self, prompts="services/prompts.json"):
         #Get API Keys from .env
         logging.info("Loading API keys from .env")
         load_dotenv()
@@ -26,7 +26,7 @@ class LLMClient:
         #load prompts and model info dictionaries
         with open(prompts, 'r') as file:
             self.prompts = json.load(file)
-        with open("models.json", 'r') as file:
+        with open("services/models.json", 'r') as file:
             self.models = json.load(file)
         logging.info("LLMClient initialized")
 
