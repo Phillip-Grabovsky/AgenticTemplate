@@ -4,6 +4,7 @@ import os
 import json
 import logging
 import google.generativeai as genai
+from groq import Groq
 
 logging.basicConfig(level=logging.INFO)
 
@@ -22,6 +23,7 @@ class LLMClient:
         self.keychain["openAI"] = os.getenv("OPENAI_API_KEY")  
         self.keychain["nvidia"] = os.getenv("NVIDIA_API_KEY")
         self.keychain["google"] = os.getenv("GOOGLE_API_KEY")
+        self.keychain["groq"] = os.getenv("GROQ_API_KEY")
         
         #load prompts and model info dictionaries
         with open(prompts, 'r') as file:
@@ -41,7 +43,7 @@ class LLMClient:
             return [{"error": "no convo exists with that name"}]
 
     # request an LLM to continue or start a saved conversation
-    async def conversation(self, convoId, message, model, sysPrompt="",data=""):
+    async def conversation(self, convoId, message, model, sysPrompt="", data="", use_groq=False):
         # setup model
         modelInfo=self.models[model]
         clientId=modelInfo[1]
@@ -53,6 +55,9 @@ class LLMClient:
                 genai.configure(api_key=self.keychain[clientId])
                 self.clients[clientId] = genai.GenerativeModel(modelName)
                 print("Initialized Google Gemini client.")
+            elif clientId == "groq":
+                self.clients[clientId] = Groq(api_key=self.keychain[clientId])
+                print("Initialized Groq client.")
             elif baseurl == "": #corresponding to an openAI GPT model
                 client = AsyncOpenAI(api_key = self.keychain[clientId])
                 self.clients[clientId] = client
@@ -96,6 +101,12 @@ class LLMClient:
             chat = self.clients[clientId].start_chat(history=history)
             response = chat.send_message(UP)
             msg = response.text
+        elif modelInfo[1] == "groq":
+            response = self.clients[clientId].chat.completions.create(
+                model=modelName,
+                messages=messages
+            )
+            msg = response.choices[0].message.content
         else:
             response = await self.clients[clientId].chat.completions.create(
                 model=modelName,
@@ -111,7 +122,7 @@ class LLMClient:
         return msg
 
     # request an LLM a single time, do not remember convo history
-    async def oneShot(self, sysPrompt, usrPrompt, model, data=""):
+    async def oneShot(self, sysPrompt, usrPrompt, model, data="", use_groq=False):
         # setup model
         modelInfo=self.models[model]
         clientId=modelInfo[1]
@@ -122,6 +133,9 @@ class LLMClient:
                 genai.configure(api_key=self.keychain[clientId])
                 self.clients[clientId] = genai.GenerativeModel(modelName)
                 print("Initialized Google Gemini client.")
+            elif clientId == "groq":
+                self.clients[clientId] = Groq(api_key=self.keychain[clientId])
+                print("Initialized Groq client.")
             elif baseurl == "": #corresponding to an openAI GPT model
                 client = AsyncOpenAI(api_key = self.keychain[clientId])
                 self.clients[clientId] = client
@@ -148,6 +162,12 @@ class LLMClient:
         if modelInfo[1] == "google":
             response = self.clients[clientId].generate_content(usrPrompt)
             msg = response.text
+        elif modelInfo[1] == "groq":
+            response = self.clients[clientId].chat.completions.create(
+                model=modelName,
+                messages=messages
+            )
+            msg = response.choices[0].message.content
         else:
             response = await self.clients[clientId].chat.completions.create(
                 model=modelName,

@@ -19,5 +19,6 @@
   "gpt4": ["gpt-4", "openAI", ""],
   "gpt35": ["gpt-3.5-turbo", "openAI", ""],
   "claude": ["claude-2", "pplx", "https://api.perplexity.ai"],
-  "gemini": ["gemini-pro", "google", ""]
+  "gemini": ["gemini-pro", "google", ""],
+  "llama-3.3-70b-versatile": ["llama-3.3-70b-versatile", "groq", ""]
 }
