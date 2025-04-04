@@ -1,0 +1,23 @@
+{
+  "sonar-deep-research": ["sonar-deep-research", "pplx", "https://api.perplexity.ai"],
+  "sonar-reasoning-pro": ["sonar-reasoning-pro", "pplx", "https://api.perplexity.ai"],
+  "sonar-reasoning": ["sonar-reasoning", "pplx", "https://api.perplexity.ai"],
+  "sonar-pro": ["sonar-pro", "pplx", "https://api.perplexity.ai"],
+  "sonar": [ "sonar", "pplx", "https://api.perplexity.ai" ],
+  "r1-uncensored": ["r1-1776", "pplx", "https://api.perplexity.ai"],
+  "4o": ["gpt-4o", "openAI", ""],
+  "4o-mini": ["gpt-4o-mini", "openAI", ""],
+  "o1": ["o1", "openAI", ""],
+  "o3-mini": ["o3-mini", "openAI", ""],
+  "nemotron": [
+    "nvidia/nemotron-4-340b-instruct",
+    "nvidia",
+    "https://integrate.api.nvidia.com/v1"
+  ],
+  "gemini-2.0-flash" : ["gemini-2.0-flash", "google", ""],
+  "gemini-2.5-pro" : ["gemini-2.5-pro-exp-03-25", "google", ""],
+  "gpt4": ["gpt-4", "openAI", ""],
+  "gpt35": ["gpt-3.5-turbo", "openAI", ""],
+  "claude": ["claude-2", "pplx", "https://api.perplexity.ai"],
+  "gemini": ["gemini-pro", "google", ""]
+}
