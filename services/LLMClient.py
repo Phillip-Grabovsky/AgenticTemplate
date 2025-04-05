@@ -24,6 +24,7 @@ class LLMClient:
         self.keychain["nvidia"] = os.getenv("NVIDIA_API_KEY")
         self.keychain["google"] = os.getenv("GOOGLE_API_KEY")
         self.keychain["groq"] = os.getenv("GROQ_API_KEY")
+        self.keychain["anthropic"] = os.getenv("ANTHROPIC_API_KEY")
         
         #load prompts and model info dictionaries
         with open(prompts, 'r') as file:
@@ -61,7 +62,7 @@ class LLMClient:
             elif baseurl == "": #corresponding to an openAI GPT model
                 client = AsyncOpenAI(api_key = self.keychain[clientId])
                 self.clients[clientId] = client
-            else:                #all other models
+            else:                #all other models including Anthropic
                 client = AsyncOpenAI(
                     base_url = baseurl,
                     api_key = self.keychain[clientId]
@@ -107,7 +108,7 @@ class LLMClient:
                 messages=messages
             )
             msg = response.choices[0].message.content
-        else:
+        else:  # OpenAI and Anthropic models
             response = await self.clients[clientId].chat.completions.create(
                 model=modelName,
                 messages=messages
@@ -139,7 +140,7 @@ class LLMClient:
             elif baseurl == "": #corresponding to an openAI GPT model
                 client = AsyncOpenAI(api_key = self.keychain[clientId])
                 self.clients[clientId] = client
-            else:                #all other models
+            else:                #all other models including Anthropic
                 client = AsyncOpenAI(
                     base_url = baseurl,
                     api_key = self.keychain[clientId]
@@ -168,7 +169,7 @@ class LLMClient:
                 messages=messages
             )
             msg = response.choices[0].message.content
-        else:
+        else:  # OpenAI and Anthropic models
             response = await self.clients[clientId].chat.completions.create(
                 model=modelName,
                 messages=messages,
