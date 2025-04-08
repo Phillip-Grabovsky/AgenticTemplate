@@ -184,7 +184,7 @@ class LLMClient:
             messages = self.convos[convoId]
             messages.append({
                     "role": "user",
-                    "content": ( usrPrompt ),
+                    "content": ( usrPrompt + data ),
                 })
         except KeyError: #new conversation or oneshot
             messages = [
@@ -194,15 +194,8 @@ class LLMClient:
                 },
                 {
                     "role": "user",
-                    "content": ( usrPrompt ),
+                    "content": ( usrPrompt + data ),
                 },
             ]
         finally:
-            if data == "":
-                return messages
-            else:
-                messages.append({
-                    "role": "user",
-                    "content": ( data ),
-                })
-                return messages
+            return messages

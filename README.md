@@ -1,27 +1,22 @@
 # LLM Client
 
-A flexible and extensible Python client for interacting with LLMs and inference providers through their respective APIs.
+A Python client for interacting with multiple LLM providers through their APIs.
 
-## Overview
-
-This project provides a unified interface to interact with multiple LLM providers including:
-- OpenAI (GPT-4o, GPT-3.5, etc.)
-- Anthropic (Claude models)
-- Google (Gemini models)
-- Perplexity (Sonar models)
+## Supported Providers
+- OpenAI (GPT-4, GPT-3.5)
+- Anthropic (Claude)
+- Google (Gemini)
+- Perplexity (Sonar)
 - Groq
 - NVIDIA (Nemotron)
 
-The client handles API authentication, conversation management, and request formatting for each provider, allowing you to focus on the content rather than implementation details.
-
 ## Setup
 
-1. Clone the repository
-2. Install dependencies:
+1. Install dependencies:
    ```
    pip install openai python-dotenv google-generativeai groq
    ```
-3. Create a `.env` file in the root directory with your API keys:
+2. Create a `.env` file with your API keys:
    ```
    OPENAI_API_KEY=your_openai_key
    PPLX_API_KEY=your_perplexity_key
@@ -35,18 +30,15 @@ The client handles API authentication, conversation management, and request form
 
 ### Core Functions
 
-The LLMClient provides two main methods for interacting with LLMs:
-
 #### oneShot()
 ```python
 async def oneShot(
     sysPrompt: str,      # System prompt or key from prompts.json
     usrPrompt: str,      # User prompt or key from prompts.json
     model: str,          # Model nickname from models.json
-    data: str = ""       # Optional additional data
+    data: str = ""       # Additional text appended to user prompt
 ) -> str
 ```
-Use this for single-turn conversations where you don't need to maintain conversation history.
 
 #### conversation()
 ```python
@@ -55,57 +47,36 @@ async def conversation(
     message: str,        # Message or key from prompts.json
     model: str,          # Model nickname from models.json
     sysPrompt: str = "", # Optional system prompt
-    data: str = ""       # Optional additional data
+    data: str = ""       # Additional text appended to user prompt
 ) -> str
 ```
-Use this for multi-turn conversations where you want to maintain context between messages.
 
 ### Model Configuration
 
-Models are configured in `services/models.json` with the following structure:
+Configure models in `services/models.json`:
 ```json
 {
     "model-nickname": [
-        "actual-model-name",  # The model name as used by the provider
-        "provider-id",        # One of: "openAI", "anthropic", "google", "groq", etc.
-        "base-url"           # Optional base URL for custom endpoints
+        "actual-model-name",  # Provider's model name
+        "provider-id",        # "openAI", "anthropic", "google", "groq", etc.
+        "base-url"           # Required for OpenAI-compatible APIs (e.g., Groq)
     ]
 }
 ```
 
-For example, to use Groq:
+Example configurations:
 ```json
 {
-    "llama-3.3-70b": ["llama-3.3-70b-versatile", "groq", ""]
+    "gpt-4": ["gpt-4", "openAI", ""],
+    "gemini-2.0-flash" : ["gemini-2.0-flash", "google", ""],
+    "llama-3.3-70b": ["llama-3.3-70b-versatile", "groq", "https://api.groq.com/openai/v1"]
 }
 ```
 
 ### Project Structure
-
-The project is organized into several key components:
-
-#### `flow.py`
-- Orchestrates the overall execution flow
-- Manages the lifecycle of agents and state
-- Handles high-level program control
-
-#### `state.py`
-- Defines the State class that maintains application state
-- Stores conversation history, user inputs, and agent outputs
-- Provides a centralized way to manage data between components
-
-#### `agents/` directory
-- Contains individual agent implementations
-- Each agent is responsible for specific tasks or domains
-- Agents can be easily added or modified without changing the core flow
-- Example: `example_agent.py` shows how to create a new agent
-
-This separation of concerns provides several benefits:
-- **Modularity**: Each component has a specific responsibility
-- **Extensibility**: New agents can be added without modifying existing code
-- **Maintainability**: Changes to one component don't affect others
-- **Testability**: Components can be tested in isolation
-- **Reusability**: Agents can be reused across different flows
+- `flow.py`: Main execution flow
+- `state.py`: Shared whiteboard for agents to contribute to &  draw from
+- `agents/`: Individual agent implementations
 
 ### Example Usage
 
@@ -113,23 +84,24 @@ This separation of concerns provides several benefits:
 from services.LLMClient import LLMClient
 from state import State
 
-# Initialize state and client
 state = State()
 client = LLMClient()
 
-# Single-turn conversation
+# Single-turn with custom data
 response = await client.oneShot(
-    "sysPrompt1",           # System prompt key
-    "What is the weather?", # User question
-    "claude-3.7-sonnet"     # Model to use
+    "sysPrompt1",           # From prompts.json
+    "basePrompt",          # From prompts.json
+    "claude-3.7-sonnet",    # From models.json
+    data="in New York"          # Appended to basePrompt
 )
 
 # Multi-turn conversation
 response = await client.conversation(
-    "weather_chat",         # Conversation ID
-    "What's the forecast?", # User message
-    "claude-3.7-sonnet",    # Model to use
-    "You are a weather expert"  # System prompt
+    "weather_chat",              #convo ID
+    "basePrompt",               #from prompts.json
+    "claude-3.7-sonnet",        #model nickname
+    "You are a weather expert", #regular strings also work in place of prompt keys from json
+    data="in New York"               #data is appended to the user prompt
 )
 ```
 
