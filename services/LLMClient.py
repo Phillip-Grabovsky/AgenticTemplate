@@ -44,7 +44,7 @@ class LLMClient:
             return [{"error": "no convo exists with that name"}]
 
     # request an LLM to continue or start a saved conversation
-    async def conversation(self, convoId, message, model, sysPrompt="", data="", use_groq=False):
+    async def conversation(self, convoId, message, model, sysPrompt="", data=""):
         # setup model
         modelInfo=self.models[model]
         clientId=modelInfo[1]
@@ -123,7 +123,7 @@ class LLMClient:
         return msg
 
     # request an LLM a single time, do not remember convo history
-    async def oneShot(self, sysPrompt, usrPrompt, model, data="", use_groq=False):
+    async def oneShot(self, sysPrompt, usrPrompt, model, data=""):
         # setup model
         modelInfo=self.models[model]
         clientId=modelInfo[1]

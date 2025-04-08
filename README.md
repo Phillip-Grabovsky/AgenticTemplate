@@ -43,8 +43,7 @@ async def oneShot(
     sysPrompt: str,      # System prompt or key from prompts.json
     usrPrompt: str,      # User prompt or key from prompts.json
     model: str,          # Model nickname from models.json
-    data: str = "",      # Optional additional data
-    use_groq: bool = False  # Optional flag to use Groq
+    data: str = ""       # Optional additional data
 ) -> str
 ```
 Use this for single-turn conversations where you don't need to maintain conversation history.
@@ -56,11 +55,30 @@ async def conversation(
     message: str,        # Message or key from prompts.json
     model: str,          # Model nickname from models.json
     sysPrompt: str = "", # Optional system prompt
-    data: str = "",      # Optional additional data
-    use_groq: bool = False  # Optional flag to use Groq
+    data: str = ""       # Optional additional data
 ) -> str
 ```
 Use this for multi-turn conversations where you want to maintain context between messages.
+
+### Model Configuration
+
+Models are configured in `services/models.json` with the following structure:
+```json
+{
+    "model-nickname": [
+        "actual-model-name",  # The model name as used by the provider
+        "provider-id",        # One of: "openAI", "anthropic", "google", "groq", etc.
+        "base-url"           # Optional base URL for custom endpoints
+    ]
+}
+```
+
+For example, to use Groq:
+```json
+{
+    "llama-3.3-70b": ["llama-3.3-70b-versatile", "groq", ""]
+}
+```
 
 ### Project Structure
 
@@ -69,22 +87,34 @@ The project is organized into several key components:
 #### `flow.py`
 - Orchestrates the overall execution flow
 - Manages the lifecycle of agents and state
+- Handles high-level program control
 
 #### `state.py`
+- Defines the State class that maintains application state
 - Stores conversation history, user inputs, and agent outputs
-- Acts as a shared whiteboard for agents working together on a problem
+- Provides a centralized way to manage data between components
 
 #### `agents/` directory
 - Contains individual agent implementations
 - Each agent is responsible for specific tasks or domains
 - Agents can be easily added or modified without changing the core flow
+- Example: `example_agent.py` shows how to create a new agent
+
+This separation of concerns provides several benefits:
+- **Modularity**: Each component has a specific responsibility
+- **Extensibility**: New agents can be added without modifying existing code
+- **Maintainability**: Changes to one component don't affect others
+- **Testability**: Components can be tested in isolation
+- **Reusability**: Agents can be reused across different flows
 
 ### Example Usage
 
 ```python
 from services.LLMClient import LLMClient
+from state import State
 
-# Initialize client
+# Initialize state and client
+state = State()
 client = LLMClient()
 
 # Single-turn conversation
@@ -99,6 +129,7 @@ response = await client.conversation(
     "weather_chat",         # Conversation ID
     "What's the forecast?", # User message
     "claude-3.7-sonnet",    # Model to use
+    "You are a weather expert"  # System prompt
 )
 ```
 
