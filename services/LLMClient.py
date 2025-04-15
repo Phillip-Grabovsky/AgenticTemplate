@@ -3,10 +3,12 @@ from openai import AsyncOpenAI
 import os
 import json
 import logging
-import google.generativeai as genai
-from groq import Groq
+import google.genai as genai
+from google.genai import types
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
+# Disable AFC logging
+logging.getLogger("google_genai.models").setLevel(logging.WARNING)
 
 class LLMClient:
     prompts = {}
@@ -53,16 +55,12 @@ class LLMClient:
         if clientId not in self.clients:
             baseurl=modelInfo[2]
             if clientId == "google":
-                genai.configure(api_key=self.keychain[clientId])
-                self.clients[clientId] = genai.GenerativeModel(modelName)
+                self.clients[clientId] = genai.Client(api_key=self.keychain[clientId])
                 print("Initialized Google Gemini client.")
-            elif clientId == "groq":
-                self.clients[clientId] = Groq(api_key=self.keychain[clientId])
-                print("Initialized Groq client.")
             elif baseurl == "": #corresponding to an openAI GPT model
                 client = AsyncOpenAI(api_key = self.keychain[clientId])
                 self.clients[clientId] = client
-            else:                #all other models including Anthropic
+            else:                #all other openAI compatible models
                 client = AsyncOpenAI(
                     base_url = baseurl,
                     api_key = self.keychain[clientId]
@@ -82,33 +80,31 @@ class LLMClient:
         except KeyError:
             SP = sysPrompt
 
-        messages = await self.createPayload(sysPrompt=SP,usrPrompt=UP,convoId=convoId,data=data)
+        messages = [] #store the conversation history
+        msg = ""    #store the response
 
         # For Google models, handle chat differently
         if modelInfo[1] == "google":
             try:
-                # Get existing chat history and convert to Gemini format
-                history = []
-                for msg in self.convos[convoId]:
-                    if msg["role"] == "user":
-                        history.append({"role": "user", "parts": [msg["content"]]})
-                    elif msg["role"] == "assistant":
-                        history.append({"role": "model", "parts": [msg["content"]]})
-            except KeyError:
-                history = []
-                if SP:  # Add system prompt as first user message if provided
-                    history.append({"role": "user", "parts": [SP]})
-            
-            chat = self.clients[clientId].start_chat(history=history)
-            response = chat.send_message(UP)
-            msg = response.text
-        elif modelInfo[1] == "groq":
-            response = self.clients[clientId].chat.completions.create(
-                model=modelName,
-                messages=messages
-            )
-            msg = response.choices[0].message.content
-        else:  # OpenAI and Anthropic models
+                messages, history, SP = await self.createGooglePayload(sysPrompt=SP,usrPrompt=UP,convoId=convoId,data=data)
+
+                # Initialize new chat with system prompt if provided                    
+                config = types.GenerateContentConfig(
+                    system_instruction=SP
+                ) if SP else None
+                chat = self.clients[clientId].chats.create(
+                    model=modelName,
+                    history=history,
+                    config=config
+                )
+                response = chat.send_message(UP+data)
+                msg = response.text
+            except Exception as e:
+                logging.error(f"Error in Google chat: {str(e)}")
+                raise e
+
+        else:  # all openai compatible models
+            messages = await self.createPayload(sysPrompt=SP,usrPrompt=UP,convoId=convoId,data=data)
             response = await self.clients[clientId].chat.completions.create(
                 model=modelName,
                 messages=messages
@@ -131,16 +127,12 @@ class LLMClient:
         if clientId not in self.clients:
             baseurl=modelInfo[2]
             if clientId == "google":
-                genai.configure(api_key=self.keychain[clientId])
-                self.clients[clientId] = genai.GenerativeModel(modelName)
+                self.clients[clientId] = genai.Client(api_key=self.keychain[clientId])
                 print("Initialized Google Gemini client.")
-            elif clientId == "groq":
-                self.clients[clientId] = Groq(api_key=self.keychain[clientId])
-                print("Initialized Groq client.")
             elif baseurl == "": #corresponding to an openAI GPT model
                 client = AsyncOpenAI(api_key = self.keychain[clientId])
                 self.clients[clientId] = client
-            else:                #all other models including Anthropic
+            else:                #all openai compatible models
                 client = AsyncOpenAI(
                     base_url = baseurl,
                     api_key = self.keychain[clientId]
@@ -158,18 +150,20 @@ class LLMClient:
             SP = self.prompts[sysPrompt]
         except KeyError:
             SP = sysPrompt
-        messages = await self.createPayload(sysPrompt=SP,usrPrompt=UP,data=data)
+        
         # request
         if modelInfo[1] == "google":
-            response = self.clients[clientId].generate_content(usrPrompt)
-            msg = response.text
-        elif modelInfo[1] == "groq":
-            response = self.clients[clientId].chat.completions.create(
+            config = types.GenerateContentConfig(
+                system_instruction=SP
+            ) if SP else None
+            response = self.clients[clientId].models.generate_content(
                 model=modelName,
-                messages=messages
+                contents=UP+data,
+                config=config
             )
-            msg = response.choices[0].message.content
-        else:  # OpenAI and Anthropic models
+            msg = response.text
+        else:  # All openAI compatible models
+            messages = await self.createPayload(sysPrompt=SP,usrPrompt=UP,data=data)
             response = await self.clients[clientId].chat.completions.create(
                 model=modelName,
                 messages=messages,
@@ -199,3 +193,71 @@ class LLMClient:
             ]
         finally:
             return messages
+
+
+    async def createGooglePayload(self, sysPrompt="", usrPrompt="", convoId="",data=""):
+        """Creates a payload for Google's Gemini API from conversation history."""
+        history = []
+        messages = []
+        SP = sysPrompt
+        
+        try:
+            # Get existing conversation history
+            messages = self.convos[convoId]
+            messages.append({
+                    "role": "user",
+                    "content": ( usrPrompt + data ),
+                })
+            
+            if messages[0]["role"] == "system":
+                SP = messages[0]["content"]
+            
+            # Convert OpenAI format messages to Google Gemini format
+            for msg in messages:
+                role = msg["role"]
+                content = msg["content"]
+                
+                # Skip system messages as they're handled separately in the system_instruction
+                if role == "system":
+                    SP = content
+                    continue
+                    
+                # Map OpenAI roles to Gemini roles
+                if role == "user":
+                    gemini_role = "user"
+                elif role == "assistant":
+                    gemini_role = "model"
+                else:
+                    continue  # Skip unknown roles
+                
+                # Create Content object for this message
+                history.append(
+                    types.Content(
+                        role=gemini_role,
+                        parts=[types.Part(text=content)]
+                    )
+                )
+
+        except KeyError:
+            # If no conversation history exists, just include the new message
+            history = [
+                types.Content(
+                    role="user",
+                    parts=[types.Part(text=usrPrompt + data)]
+                )
+            ]
+
+            # Add the new message to the conversation history
+            messages = [
+                {
+                    "role": "system",
+                    "content": (sysPrompt),
+                },
+                {
+                    "role": "user",
+                    "content": ( usrPrompt + data ),
+                },
+            ]
+            
+        finally:
+            return messages,history,SP
