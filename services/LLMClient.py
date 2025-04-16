@@ -60,7 +60,7 @@ class LLMClient:
             elif baseurl == "": #corresponding to an openAI GPT model
                 client = AsyncOpenAI(api_key = self.keychain[clientId])
                 self.clients[clientId] = client
-            else:                #all other openAI compatible models
+            else:                #all other openai compatible models
                 client = AsyncOpenAI(
                     base_url = baseurl,
                     api_key = self.keychain[clientId]
@@ -86,25 +86,29 @@ class LLMClient:
         # For Google models, handle chat differently
         if modelInfo[1] == "google":
             try:
-                messages, history, SP = await self.createGooglePayload(sysPrompt=SP,usrPrompt=UP,convoId=convoId,data=data)
+                messages, history, SP = self.createGooglePayload(sysPrompt=SP,usrPrompt=UP,convoId=convoId,data=data)
 
-                # Initialize new chat with system prompt if provided                    
+                # Initialize new chat with system prompt if provided
+                print("Creating Config")               
                 config = types.GenerateContentConfig(
                     system_instruction=SP
                 ) if SP else None
-                chat = self.clients[clientId].chats.create(
+                print("Creating Chat")
+                chat = self.clients[clientId].aio.chats.create(
                     model=modelName,
                     history=history,
                     config=config
                 )
-                response = chat.send_message(UP+data)
+                print("Sending Message")
+                response = await chat.send_message(UP+data)
+                print("Response Received")
                 msg = response.text
             except Exception as e:
                 logging.error(f"Error in Google chat: {str(e)}")
                 raise e
 
         else:  # all openai compatible models
-            messages = await self.createPayload(sysPrompt=SP,usrPrompt=UP,convoId=convoId,data=data)
+            messages = self.createPayload(sysPrompt=SP,usrPrompt=UP,convoId=convoId,data=data)
             response = await self.clients[clientId].chat.completions.create(
                 model=modelName,
                 messages=messages
@@ -132,7 +136,7 @@ class LLMClient:
             elif baseurl == "": #corresponding to an openAI GPT model
                 client = AsyncOpenAI(api_key = self.keychain[clientId])
                 self.clients[clientId] = client
-            else:                #all openai compatible models
+            else:                #all other openai compatible models
                 client = AsyncOpenAI(
                     base_url = baseurl,
                     api_key = self.keychain[clientId]
@@ -156,11 +160,13 @@ class LLMClient:
             config = types.GenerateContentConfig(
                 system_instruction=SP
             ) if SP else None
-            response = self.clients[clientId].models.generate_content(
+            
+            # Create a chat without history
+            chat = self.clients[clientId].aio.chats.create(
                 model=modelName,
-                contents=UP+data,
                 config=config
             )
+            response = await chat.send_message(UP+data)
             msg = response.text
         else:  # All openAI compatible models
             messages = await self.createPayload(sysPrompt=SP,usrPrompt=UP,data=data)
@@ -172,7 +178,7 @@ class LLMClient:
         return msg
 
     # form messages array payload by appending new prompting & data to (optional) convo msg history
-    async def createPayload(self, sysPrompt="", usrPrompt="", convoId="",data=""):
+    def createPayload(self, sysPrompt="", usrPrompt="", convoId="",data=""):
         messages = []
         try: #continue a conversation
             messages = self.convos[convoId]
@@ -195,7 +201,7 @@ class LLMClient:
             return messages
 
 
-    async def createGooglePayload(self, sysPrompt="", usrPrompt="", convoId="",data=""):
+    def createGooglePayload(self, sysPrompt="", usrPrompt="", convoId="",data=""):
         """Creates a payload for Google's Gemini API from conversation history."""
         history = []
         messages = []
