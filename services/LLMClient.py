@@ -169,7 +169,7 @@ class LLMClient:
             response = await chat.send_message(UP+data)
             msg = response.text
         else:  # All openAI compatible models
-            messages = await self.createPayload(sysPrompt=SP,usrPrompt=UP,data=data)
+            messages = self.createPayload(sysPrompt=SP,usrPrompt=UP,data=data)
             response = await self.clients[clientId].chat.completions.create(
                 model=modelName,
                 messages=messages,
