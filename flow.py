@@ -1,5 +1,6 @@
 from state import State
-import agents.example_agent as example_agent
+import agents.example_agent.example_agent as example_agent
+import agents.test_agent.test_agent as test_agent
 import asyncio
 
 async def main():

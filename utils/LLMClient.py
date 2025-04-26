@@ -1,26 +1,26 @@
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
+load_dotenv()
+
 import os
 import json
-import logging
+from openai import AsyncOpenAI
+from pydantic import ValidationError
+from setup_logger import setup_logger
 import google.genai as genai
 from google.genai import types
 
-logging.basicConfig(level=logging.WARNING)
-# Disable AFC logging
-logging.getLogger("google_genai.models").setLevel(logging.WARNING)
+# Disable AFC logger
+logger = setup_logger("LLMClient")
 
 class LLMClient:
-    prompts = {}
-    clients = {}
-    models = {}
-    keychain = {}
-    convos = {}
 
-    def __init__(self, prompts="services/prompts.json"):
+    def __init__(self):
         #Get API Keys from .env
-        logging.info("Loading API keys from .env")
-        load_dotenv()
+        self.keychain = {}
+        self.clients = {}
+        self.prompts = {}
+        self.models = {}
+
         self.keychain["pplx"] = os.getenv("PPLX_API_KEY")   #Load keys from .env
         self.keychain["openAI"] = os.getenv("OPENAI_API_KEY")  
         self.keychain["nvidia"] = os.getenv("NVIDIA_API_KEY")
@@ -29,11 +29,11 @@ class LLMClient:
         self.keychain["anthropic"] = os.getenv("ANTHROPIC_API_KEY")
         
         #load prompts and model info dictionaries
-        with open(prompts, 'r') as file:
-            self.prompts = json.load(file)
-        with open("services/models.json", 'r') as file:
+        # with open(prompts, 'r') as file:
+        #     self.prompts = json.load(file)
+        with open("models.json", 'r') as file:
             self.models = json.load(file)
-        logging.info("LLMClient initialized")
+        logger.info("LLMClient initialized")
 
     def clearConvos(self):
         self.convos = {}
@@ -69,16 +69,8 @@ class LLMClient:
             print("Initialized " + clientId + " client.")
             
         # setup prompts & make payload
-        SP = ""
-        UP = ""
-        try:    #attempt to index json
-            UP = self.prompts[message]
-        except KeyError:
-            UP = message
-        try:    #attempt to index json
-            SP = self.prompts[sysPrompt]
-        except KeyError:
-            SP = sysPrompt
+        UP = message
+        SP = sysPrompt
 
         messages = [] #store the conversation history
         msg = ""    #store the response
@@ -104,14 +96,14 @@ class LLMClient:
                 print("Response Received")
                 msg = response.text
             except Exception as e:
-                logging.error(f"Error in Google chat: {str(e)}")
+                logger.error(f"Error in Google chat: {str(e)}")
                 raise e
 
         else:  # all openai compatible models
             messages = self.createPayload(sysPrompt=SP,usrPrompt=UP,convoId=convoId,data=data)
             response = await self.clients[clientId].chat.completions.create(
                 model=modelName,
-                messages=messages
+                messages=messages,
             )
             msg = response.choices[0].message.content
 
@@ -123,7 +115,7 @@ class LLMClient:
         return msg
 
     # request an LLM a single time, do not remember convo history
-    async def oneShot(self, sysPrompt, usrPrompt, model, data=""):
+    async def oneShot(self, sysPrompt: str, usrPrompt: str, model: str, data: str = "") -> str:
         # setup model
         modelInfo=self.models[model]
         clientId=modelInfo[1]
@@ -143,17 +135,10 @@ class LLMClient:
                 )
                 self.clients[clientId] = client
             print("Initialized " + clientId + " client.")
-        # setup prompts & make payload
-        SP = ""
-        UP = ""
-        try:    #attempt to index json
-            UP = self.prompts[usrPrompt]
-        except KeyError:
-            UP = usrPrompt
-        try:    #attempt to index json
-            SP = self.prompts[sysPrompt]
-        except KeyError:
-            SP = sysPrompt
+        
+        # Use prompts directly without trying to look them up
+        SP = sysPrompt
+        UP = usrPrompt
         
         # request
         if modelInfo[1] == "google":
@@ -170,9 +155,10 @@ class LLMClient:
             msg = response.text
         else:  # All openAI compatible models
             messages = self.createPayload(sysPrompt=SP,usrPrompt=UP,data=data)
+            logger.debug(f"Messages: {str(messages)}")
             response = await self.clients[clientId].chat.completions.create(
                 model=modelName,
-                messages=messages,
+                messages=messages
             )
             msg = response.choices[0].message.content
         return msg
@@ -180,24 +166,37 @@ class LLMClient:
     # form messages array payload by appending new prompting & data to (optional) convo msg history
     def createPayload(self, sysPrompt="", usrPrompt="", convoId="",data=""):
         messages = []
-        try: #continue a conversation
-            messages = self.convos[convoId]
-            messages.append({
+        try:
+            if convoId and convoId.strip():  # Check for non-empty string
+                messages = self.convos[convoId]
+                messages.append({
                     "role": "user",
-                    "content": ( usrPrompt + data ),
+                    "content": (usrPrompt + data),
                 })
-        except KeyError: #new conversation or oneshot
+            else:  # Handle one-shot case
+                messages = [
+                    {
+                        "role": "system",
+                        "content": sysPrompt,
+                    },
+                    {
+                        "role": "user",
+                        "content": (usrPrompt + data),
+                    },
+                ]
+        except KeyError:  # This should only happen if convoId is provided but doesn't exist
             messages = [
                 {
                     "role": "system",
-                    "content": (sysPrompt),
+                    "content": sysPrompt,
                 },
                 {
                     "role": "user",
-                    "content": ( usrPrompt + data ),
+                    "content": (usrPrompt + data),
                 },
             ]
         finally:
+            logger.debug(f"Messages: {str(messages)}")
             return messages
 
 
@@ -267,3 +266,62 @@ class LLMClient:
             
         finally:
             return messages,history,SP
+        
+        
+    def validate_response(self, response_str: str, expected_type):
+        """
+        Parse and validate an LLM response string against an expected Pydantic model.
+        Returns a new instance of expected_type with INVALID values if validation fails.
+        
+        Args:
+            response_str: The string response from the LLM
+            expected_type: The Pydantic model class to validate against
+        Returns:
+            The validated Pydantic model instance, or a new instance with INVALID values if validation fails
+        """
+        # If response is empty or None, return default INVALID instance
+        if not response_str:
+            logger.warning("Empty response received")
+            return expected_type()
+            
+        try:
+            #remove '''json if it exists
+            response_str = response_str.replace('```', '')
+            response_str = response_str.replace('json', '')
+
+            # Try to parse the response as JSON
+            if isinstance(response_str, str):
+                try:
+                    parsed_response = json.loads(response_str)
+                    logger.debug(f"Successfully parsed JSON response: {parsed_response}")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse JSON response: {e} \n Need to use regex to parse JSON")
+                    logger.warning(f"Raw response: {response_str}")
+                    # Try to extract JSON from the string if it's embedded in other text
+                    import re
+                    json_match = re.search(r'\{.*\}', response_str, re.DOTALL)
+                    if json_match:
+                        try:
+                            parsed_response = json.loads(json_match.group(0))
+                            logger.debug(f"Successfully extracted and parsed JSON from text: {parsed_response}")
+                        except json.JSONDecodeError:
+                            logger.warning("Failed to parse extracted JSON")
+                            return expected_type()
+                    else:
+                        logger.warning("No JSON found in response text")
+                        return expected_type()
+            else:
+                parsed_response = response_str
+                
+            try:
+                # Validate against the expected Pydantic model
+                validated_response = expected_type.model_validate(parsed_response)
+                return validated_response
+            except ValidationError as e:
+                logger.warning(f"Pydantic validation error: {str(e)}")
+                logger.warning(f"Failed validation for data: {parsed_response}")
+                return expected_type()
+                
+        except Exception as e:
+            logger.warning(f"Unexpected validation error: {str(e)}")
+            return expected_type()
